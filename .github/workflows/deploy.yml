@@ -31,7 +31,7 @@ jobs:
             docker stop mnemo || true
             docker rm mnemo || true
 
-            # Rebuild
+            # Rebuild the docker image
             docker build -t mnemo .
 
             # Run new container
