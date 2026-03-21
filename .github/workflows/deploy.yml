@@ -1,6 +1,7 @@
 name: Deploy Mnemo
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
