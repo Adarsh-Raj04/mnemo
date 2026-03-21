@@ -15,29 +15,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: SSH to EC2 and deploy
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/app/mnemo/backend
+            set -e
 
-            # Pull latest code
-            git pull origin main
+            echo "📂 Navigating to project..."
+            cd ~/app/mnemo
 
-            # Stop old container
+            echo "📥 Fetching latest code..."
+            git fetch origin
+            git reset --hard origin/main
+
+            echo " Enter the backend directory..."
+            cd backend
+
+            echo "🛑 Stopping old container..."
             docker stop mnemo || true
             docker rm mnemo || true
 
-            # Rebuild
-            docker build -t mnemo .
 
-            # Run new container
+            echo "🔍 Checking .env file..."
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: .env file missing!"
+              exit 1
+            fi
+
+            echo "🏗️ Building Docker image..."
+            docker build --no-cache -t mnemo .
+
+            echo "🚀 Starting new container..."
             docker run -d \
               --name mnemo \
               --restart unless-stopped \
               -p 127.0.0.1:8081:8081 \
               --env-file .env \
               mnemo
+
+            echo "📦 Running containers:"
+            docker ps
+
+            echo "✅ Deployment successful!"
