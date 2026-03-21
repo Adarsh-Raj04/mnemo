@@ -22,7 +22,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/apps/mnemo/backend
+            cd ~/app/mnemo/backend
 
             # Pull latest code
             git pull origin main
