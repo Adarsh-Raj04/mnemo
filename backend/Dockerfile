@@ -13,4 +13,4 @@ COPY . .
 # App Runner expects port 8080
 EXPOSE 8080
 
-CMD ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
