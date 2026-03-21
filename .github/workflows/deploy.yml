@@ -1,0 +1,43 @@
+name: Deploy Mnemo
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: SSH to EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/apps/mnemo/backend
+
+            # Pull latest code
+            git pull origin main
+
+            # Stop old container
+            docker stop mnemo || true
+            docker rm mnemo || true
+
+            # Rebuild
+            docker build -t mnemo .
+
+            # Run new container
+            docker run -d \
+              --name mnemo \
+              --restart unless-stopped \
+              -p 127.0.0.1:8080:8080 \
+              --env-file .env \
+              mnemo
