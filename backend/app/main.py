@@ -15,7 +15,11 @@ from app.routes import (
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Mnemo API", version="2.0.0")
+app = FastAPI(
+    title="Mnemo API",
+    version="2.0.0",
+    root_path="/mnemo"
+)
 
 app.add_middleware(
     CORSMiddleware,
