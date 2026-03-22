@@ -1,6 +1,5 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from openai import OpenAI
 import uuid
 import os
 
@@ -23,11 +22,13 @@ def load_and_chunk(
     return chunks, total_pages
 
 
-def embed_and_store(chunks, filename: str, total_pages: int, user, api_key: str):
+def embed_and_store(chunks, filename: str, total_pages: int, user, api_key: str = None):
     from app.core.vector_store.factory import get_vector_store
+    from app.core.providers.factory import get_embed_provider
 
-    client = OpenAI(api_key=api_key)
+    embed_provider = get_embed_provider(user)
     store = get_vector_store(user)
+
     texts = [c.page_content for c in chunks]
     metadatas = [
         {
@@ -38,49 +39,53 @@ def embed_and_store(chunks, filename: str, total_pages: int, user, api_key: str)
         for c in chunks
     ]
     ids = [str(uuid.uuid4()) for _ in chunks]
-    response = client.embeddings.create(input=texts, model="text-embedding-3-small")
-    embeddings = [r.embedding for r in response.data]
+    embeddings = embed_provider.embed(texts)
+
     store.store(user.id, texts, embeddings, metadatas, ids)
     return len(chunks)
 
 
-def search_user_kb(query: str, user, api_key: str, n_results: int = 5):
+def search_chunks(query: str, user, n_results: int = 5):
+    """Search a single user's KB — returns (docs, metas)."""
     from app.core.vector_store.factory import get_vector_store
+    from app.core.providers.factory import get_embed_provider
 
-    client = OpenAI(api_key=api_key)
+    embed_provider = get_embed_provider(user)
     store = get_vector_store(user)
-    response = client.embeddings.create(input=[query], model="text-embedding-3-small")
-    query_embedding = response.data[0].embedding
+    query_embedding = embed_provider.embed_query(query)
     return store.search(user.id, query_embedding, n_results)
 
 
-def search_multiple_kbs(query: str, users: list, api_key: str, n_results: int = 5):
+def search_multiple_kbs(
+    query: str, users: list, api_key: str = None, n_results: int = 5
+):
     """
-    users can be a list of User objects OR user_id strings.
-    Handles both for backwards compatibility.
+    Search across multiple users' KBs.
+    users must be full User objects.
     """
-    from app.core.vector_store.factory import (
-        get_vector_store,
-        get_vector_store_from_config,
-    )
+    from app.core.vector_store.factory import get_vector_store
+    from app.core.providers.factory import get_embed_provider
     from app.core.vector_store.chroma import ChromaAdapter
-
-    client = OpenAI(api_key=api_key)
-    response = client.embeddings.create(input=[query], model="text-embedding-3-small")
-    query_embedding = response.data[0].embedding
 
     all_docs, all_metas = [], []
 
     for user in users:
         try:
-            # Handle both User object and plain user_id string
             if isinstance(user, str):
-                # Plain ID — use ChromaDB directly as fallback
                 store = ChromaAdapter()
                 user_id = user
+                from openai import OpenAI
+
+                client = OpenAI(api_key=api_key)
+                resp = client.embeddings.create(
+                    input=[query], model="text-embedding-3-small"
+                )
+                query_embedding = resp.data[0].embedding
             else:
+                embed_provider = get_embed_provider(user)
                 store = get_vector_store(user)
                 user_id = user.id
+                query_embedding = embed_provider.embed_query(query)
 
             docs, metas = store.search(user_id, query_embedding, n_results)
             all_docs.extend(docs)

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import uuid, json
 
@@ -7,8 +8,9 @@ from app.models import User, ChatSession, ChatMessage, KBShare
 from app.schemas import ChatRequest, ChatSessionResponse, ChatMessageResponse
 from app.dependencies import get_verified_user
 from app.core.rag import search_multiple_kbs
-from app.core.llm import get_answer, generate_session_title, resolve_system_prompt
+from app.core.llm import resolve_system_prompt, stream_answer, generate_session_title
 from app.core.security import decrypt_api_key
+from app.core.providers.factory import get_llm_provider, get_provider_display_name
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -21,15 +23,8 @@ def get_api_key(user: User) -> str:
     return decrypt_api_key(user.openai_api_key_encrypted)
 
 
-def get_search_users(current_user: User, owner_id: str, db: Session) -> list:
-    """
-    Unified KB selection logic.
-    - If owner_id provided → verify access → search only that owner's KB
-    - Otherwise → search current user's KB + all KBs shared with them
-    Returns a list of full User objects ready for search_multiple_kbs.
-    """
+def get_search_users(current_user, owner_id, db):
     if owner_id and owner_id != current_user.id:
-        # Verify share permission exists
         share = (
             db.query(KBShare)
             .filter(
@@ -40,28 +35,221 @@ def get_search_users(current_user: User, owner_id: str, db: Session) -> list:
         )
         if not share:
             raise HTTPException(status_code=403, detail="Access denied")
-
         owner = db.query(User).filter(User.id == owner_id).first()
         if not owner:
             raise HTTPException(status_code=404, detail="Owner not found")
-
         return [owner]
 
-    # Own KB + all shared KBs
     shared_owner_ids = [
         s.owner_user_id
         for s in db.query(KBShare)
         .filter(KBShare.shared_with_user_id == current_user.id)
         .all()
     ]
-
-    shared_users = []
-    if shared_owner_ids:
-        shared_users = db.query(User).filter(User.id.in_(shared_owner_ids)).all()
+    shared_users = (
+        db.query(User).filter(User.id.in_(shared_owner_ids)).all()
+        if shared_owner_ids
+        else []
+    )
 
     return [current_user] + shared_users
 
 
+def sse_event(data: dict) -> str:
+    """Format a dict as an SSE data line."""
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@router.post("/stream")
+def stream_chat(
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_verified_user),
+):
+    """
+    Streaming SSE endpoint.
+    Emits: status → status → status → token* → sources → done
+    """
+
+    def event_generator():
+        # ── Session ─────────────────────────────────────────────
+        if not payload.session_id:
+            session = ChatSession(
+                id=str(uuid.uuid4()), user_id=current_user.id, title="..."
+            )
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            is_first_message = True
+        else:
+            session = (
+                db.query(ChatSession)
+                .filter(
+                    ChatSession.id == payload.session_id,
+                    ChatSession.user_id == current_user.id,
+                )
+                .first()
+            )
+            if not session:
+                yield sse_event({"type": "error", "message": "Session not found"})
+                return
+            is_first_message = (
+                not db.query(ChatMessage)
+                .filter(ChatMessage.session_id == session.id)
+                .first()
+            )
+
+        # Emit session_id immediately so frontend can update URL
+        yield sse_event({"type": "session", "session_id": session.id})
+
+        # ── Step 1: Searching ────────────────────────────────────
+        yield sse_event({"type": "status", "message": "🔍 Searching your documents..."})
+
+        try:
+            search_users = get_search_users(current_user, payload.owner_id, db)
+            chunks, metadatas = search_multiple_kbs(payload.question, search_users)
+        except HTTPException as e:
+            yield sse_event({"type": "error", "message": e.detail})
+            return
+        except Exception as e:
+            yield sse_event({"type": "error", "message": f"Search failed: {str(e)}"})
+            return
+
+        # ── Step 2: Ranking ──────────────────────────────────────
+        yield sse_event({"type": "status", "message": "📊 Ranking relevant chunks..."})
+
+        if not chunks:
+            yield sse_event(
+                {"type": "status", "message": "⚠️ No relevant content found"}
+            )
+            no_answer = "I couldn't find relevant content in your documents."
+            yield sse_event({"type": "token", "content": no_answer})
+            yield sse_event({"type": "sources", "content": []})
+            yield sse_event(
+                {
+                    "type": "done",
+                    "answer": no_answer,
+                    "sources": "[]",
+                    "session_id": session.id,
+                    "session_title": session.title,
+                }
+            )
+            db.add(
+                ChatMessage(
+                    id=str(uuid.uuid4()),
+                    session_id=session.id,
+                    role="user",
+                    content=payload.question,
+                )
+            )
+            db.add(
+                ChatMessage(
+                    id=str(uuid.uuid4()),
+                    session_id=session.id,
+                    role="assistant",
+                    content=no_answer,
+                    sources="[]",
+                )
+            )
+            db.commit()
+            return
+
+        # ── Step 3: Get LLM provider ─────────────────────────────
+        try:
+            llm_provider = get_llm_provider(current_user)
+        except ValueError as e:
+            yield sse_event({"type": "error", "message": str(e)})
+            return
+
+        model = current_user.chat_model or "gpt-3.5-turbo"
+        display_name = get_provider_display_name(
+            current_user.chat_provider or "openai", model
+        )
+
+        yield sse_event(
+            {
+                "type": "status",
+                "message": f"🤖 Generating answer with {display_name}...",
+            }
+        )
+
+        # ── Step 4: Stream tokens ────────────────────────────────
+        system_prompt = resolve_system_prompt(current_user, db)
+        full_answer = []
+        sources_json = "[]"
+
+        try:
+            for event in stream_answer(
+                query=payload.question,
+                context_chunks=chunks,
+                metadatas=metadatas,
+                llm_provider=llm_provider,
+                model=model,
+                system_prompt=system_prompt,
+            ):
+                if event["type"] == "token":
+                    full_answer.append(event["content"])
+                    yield sse_event(event)
+                elif event["type"] == "sources":
+                    yield sse_event(event)
+                elif event["type"] == "done":
+                    sources_json = event["sources"]
+        except Exception as e:
+            yield sse_event(
+                {"type": "error", "message": f"Generation failed: {str(e)}"}
+            )
+            return
+
+        answer = "".join(full_answer)
+
+        # ── Session title ────────────────────────────────────────
+        if is_first_message:
+            try:
+                session.title = generate_session_title(
+                    payload.question, llm_provider, model
+                )
+            except Exception:
+                session.title = payload.question[:50]
+
+        # ── Save to DB ───────────────────────────────────────────
+        db.add(
+            ChatMessage(
+                id=str(uuid.uuid4()),
+                session_id=session.id,
+                role="user",
+                content=payload.question,
+            )
+        )
+        db.add(
+            ChatMessage(
+                id=str(uuid.uuid4()),
+                session_id=session.id,
+                role="assistant",
+                content=answer,
+                sources=sources_json,
+            )
+        )
+        db.commit()
+
+        yield sse_event(
+            {
+                "type": "done",
+                "session_id": session.id,
+                "session_title": session.title,
+            }
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# Keep existing non-streaming endpoints below...
 @router.post("/sessions", response_model=ChatSessionResponse)
 def create_session(
     db: Session = Depends(get_db), current_user: User = Depends(get_verified_user)

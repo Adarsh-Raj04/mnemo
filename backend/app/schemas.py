@@ -91,3 +91,10 @@ class SettingsUpdate(BaseModel):
     chunk_overlap: Optional[int] = None
     openai_api_key: Optional[str] = None
     new_password: Optional[str] = None
+    chat_provider: Optional[str] = None
+    chat_model: Optional[str] = None
+    embed_provider: Optional[str] = None
+    embed_model: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    ollama_base_url: Optional[str] = None

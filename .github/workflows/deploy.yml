@@ -1,83 +1,83 @@
-name: Deploy Mnemo
+# name: Deploy Mnemo
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
+# on:
+#   workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - "backend/**"
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      # 📥 Checkout
-      - name: Checkout code
-        uses: actions/checkout@v3
+#     steps:
+#       # 📥 Checkout
+#       - name: Checkout code
+#         uses: actions/checkout@v3
 
-      # 🔐 Configure AWS
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+#       # 🔐 Configure AWS
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 🐳 Login to ECR
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+#       # 🐳 Login to ECR
+#       - name: Login to ECR
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v2
 
-      # 🧠 Set image vars
-      - name: Set image variables
-        run: |
-          echo "REPO=${{ secrets.ECR_REPOSITORY }}" >> $GITHUB_ENV
-          echo "IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
-          echo "LATEST_URI=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest" >> $GITHUB_ENV
+#       # 🧠 Set image vars
+#       - name: Set image variables
+#         run: |
+#           echo "REPO=${{ secrets.ECR_REPOSITORY }}" >> $GITHUB_ENV
+#           echo "IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
+#           echo "LATEST_URI=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest" >> $GITHUB_ENV
 
-      # 🏗️ Build & Push
-      - name: Build and Push Docker Image
-        run: |
-          docker build -t $IMAGE_URI ./backend
-          docker tag $IMAGE_URI $LATEST_URI
-          docker push $IMAGE_URI
-          docker push $LATEST_URI
+#       # 🏗️ Build & Push
+#       - name: Build and Push Docker Image
+#         run: |
+#           docker build -t $IMAGE_URI ./backend
+#           docker tag $IMAGE_URI $LATEST_URI
+#           docker push $IMAGE_URI
+#           docker push $LATEST_URI
 
-      # 🚀 Deploy to EC2
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
+#       # 🚀 Deploy to EC2
+#       - name: Deploy to EC2
+#         uses: appleboy/ssh-action@v1.0.3
+#         with:
+#           host: ${{ secrets.EC2_HOST }}
+#           username: ubuntu
+#           key: ${{ secrets.EC2_SSH_KEY }}
+#           script: |
+#             set -e
 
-            echo "🔐 Login to ECR..."
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+#             echo "🔐 Login to ECR..."
+#             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+#               | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
 
-            echo "📥 Pull latest image..."
-            docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+#             echo "📥 Pull latest image..."
+#             docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
 
-            echo "🛑 Stop old container..."
-            docker stop mnemo || true
-            docker rm mnemo || true
+#             echo "🛑 Stop old container..."
+#             docker stop mnemo || true
+#             docker rm mnemo || true
 
-            echo "🚀 Start new container..."
-            docker run -d \
-              --name mnemo \
-              --restart unless-stopped \
-              -p 127.0.0.1:8081:8081 \
-              --env-file ~/app/mnemo/backend/.env \
-              ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+#             echo "🚀 Start new container..."
+#             docker run -d \
+#               --name mnemo \
+#               --restart unless-stopped \
+#               -p 127.0.0.1:8081:8081 \
+#               --env-file ~/app/mnemo/backend/.env \
+#               ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
 
-            echo "🧹 Cleanup..."
-            docker image prune -f
+#             echo "🧹 Cleanup..."
+#             docker image prune -f
 
-            echo "📦 Running containers:"
-            docker ps
+#             echo "📦 Running containers:"
+#             docker ps
 
-            echo "✅ Deployment complete!"
+#             echo "✅ Deployment complete!"

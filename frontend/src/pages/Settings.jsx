@@ -578,6 +578,254 @@ function VectorStoreConfig() {
   );
 }
 
+function AIProviderConfig({ settings, onSave }) {
+  const [chatProvider, setChatProvider] = useState(
+    settings?.chat_provider || "openai",
+  );
+  const [chatModel, setChatModel] = useState(
+    settings?.chat_model || "gpt-3.5-turbo",
+  );
+  const [embedProvider, setEmbedProvider] = useState(
+    settings?.embed_provider || "openai",
+  );
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [ollamaUrl, setOllamaUrl] = useState(
+    settings?.ollama_base_url || "http://localhost:11434",
+  );
+  const [loading, setLoading] = useState(false);
+
+  const CHAT_PROVIDERS = [
+    {
+      id: "openai",
+      label: "OpenAI",
+      models: [
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-3.5-turbo",
+      ],
+    },
+    {
+      id: "anthropic",
+      label: "Anthropic Claude",
+      models: ["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
+    },
+    {
+      id: "gemini",
+      label: "Google Gemini",
+      models: [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+      ],
+    },
+    {
+      id: "ollama",
+      label: "Ollama (local)",
+      models: ["llama3.2", "mistral", "phi3", "qwen2.5", "deepseek-r1"],
+    },
+  ];
+
+  const EMBED_PROVIDERS = [
+    { id: "openai", label: "OpenAI (text-embedding-3-small)" },
+    { id: "gemini", label: "Google Gemini (text-embedding-004)" },
+    { id: "ollama", label: "Ollama (nomic-embed-text)" },
+  ];
+
+  const currentChat = CHAT_PROVIDERS.find((p) => p.id === chatProvider);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const payload = {
+        chat_provider: chatProvider,
+        chat_model: chatModel,
+        embed_provider: embedProvider,
+      };
+      if (anthropicKey) payload.anthropic_api_key = anthropicKey;
+      if (geminiKey) payload.gemini_api_key = geminiKey;
+      if (ollamaUrl) payload.ollama_base_url = ollamaUrl;
+
+      await updateSettings(payload);
+      toast.success("Provider settings saved!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave}>
+      <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+        Configure separate providers for chat generation and document embedding.
+        Embeddings and chat can use different providers.
+      </p>
+
+      {/* Chat provider */}
+      <div className="mb-4">
+        <label className="label">Chat provider</label>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {CHAT_PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                setChatProvider(p.id);
+                setChatModel(p.models[0]);
+              }}
+              className="text-left p-3 rounded-xl transition-all"
+              style={{
+                border: `2px solid ${chatProvider === p.id ? "var(--brand)" : "var(--border)"}`,
+                background:
+                  chatProvider === p.id
+                    ? "var(--brand-light)"
+                    : "var(--bg-secondary)",
+              }}
+            >
+              <p
+                className="text-sm font-medium"
+                style={{
+                  color:
+                    chatProvider === p.id
+                      ? "var(--brand)"
+                      : "var(--text-primary)",
+                }}
+              >
+                {p.label}
+              </p>
+            </button>
+          ))}
+        </div>
+
+        {/* Model selector for chosen provider */}
+        <label className="label">Model</label>
+        <select
+          className="input"
+          value={chatModel}
+          onChange={(e) => setChatModel(e.target.value)}
+        >
+          {currentChat?.models.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Provider-specific credentials */}
+      {chatProvider === "anthropic" && (
+        <div
+          className="mb-4 p-4 rounded-xl"
+          style={{
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <label className="label">
+            Anthropic API Key{" "}
+            {settings?.has_anthropic_key && (
+              <span style={{ color: "var(--success)" }}>✅ saved</span>
+            )}
+          </label>
+          <input
+            className="input"
+            type="password"
+            placeholder="sk-ant-..."
+            value={anthropicKey}
+            onChange={(e) => setAnthropicKey(e.target.value)}
+          />
+        </div>
+      )}
+
+      {chatProvider === "gemini" && (
+        <div
+          className="mb-4 p-4 rounded-xl"
+          style={{
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <label className="label">
+            Google AI API Key{" "}
+            {settings?.has_gemini_key && (
+              <span style={{ color: "var(--success)" }}>✅ saved</span>
+            )}
+          </label>
+          <input
+            className="input"
+            type="password"
+            placeholder="AIza..."
+            value={geminiKey}
+            onChange={(e) => setGeminiKey(e.target.value)}
+          />
+        </div>
+      )}
+
+      {chatProvider === "ollama" && (
+        <div
+          className="mb-4 p-4 rounded-xl"
+          style={{
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <label className="label">Ollama base URL</label>
+          <input
+            className="input"
+            type="text"
+            placeholder="http://localhost:11434"
+            value={ollamaUrl}
+            onChange={(e) => setOllamaUrl(e.target.value)}
+          />
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            Make sure Ollama is running locally and the model is pulled.
+          </p>
+        </div>
+      )}
+
+      {/* Embedding provider */}
+      <div className="mb-4">
+        <label className="label">Embedding provider</label>
+        <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+          Used when indexing documents. Changing this requires re-uploading all
+          documents.
+        </p>
+        {EMBED_PROVIDERS.map((p) => (
+          <label
+            key={p.id}
+            className="flex items-center gap-2 text-sm py-2 cursor-pointer"
+          >
+            <input
+              type="radio"
+              name="embed_provider"
+              checked={embedProvider === p.id}
+              onChange={() => setEmbedProvider(p.id)}
+            />
+            <span style={{ color: "var(--text-primary)" }}>{p.label}</span>
+          </label>
+        ))}
+        {embedProvider !== "openai" && embedProvider !== chatProvider && (
+          <p
+            className="text-xs mt-2 px-3 py-2 rounded-lg"
+            style={{ background: "#faeeda", color: "#633806" }}
+          >
+            ⚠️ Using {embedProvider} for embeddings requires its API key to be
+            saved above.
+          </p>
+        )}
+      </div>
+
+      <SaveButton loading={loading} label="Save Provider Settings" />
+    </form>
+  );
+}
+
 export default function Settings() {
   const [sessionId, setSessionId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false); // ← fixed: was missing
@@ -699,6 +947,11 @@ export default function Settings() {
               </p>
               <SaveButton loading={updateMutation.isPending} />
             </form>
+          </Section>
+
+          {/* AI Providers */}
+          <Section title="🔌 AI Providers">
+            <AIProviderConfig settings={settings} onSave={save} />
           </Section>
 
           {/* Chunking */}
