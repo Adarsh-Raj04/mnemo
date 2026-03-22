@@ -55,10 +55,11 @@ class OllamaLLMProvider(LLMProvider):
             res = requests.get(f"{self.base_url}/api/tags", timeout=5)
             if res.status_code == 200:
                 models = [m["name"] for m in res.json().get("models", [])]
-                return (
-                    True,
-                    f"Ollama connected. Available models: {', '.join(models[:3])}{'...' if len(models) > 3 else ''}",
-                )
-            return False, f"Ollama returned status {res.status_code}"
-        except Exception as e:
-            return False, f"Cannot reach Ollama at {self.base_url}: {e}"
+                return True, f"Ollama connected. Models: {', '.join(models[:3])}"
+            return False, f"Ollama returned {res.status_code}"
+        except Exception:
+            return False, (
+                f"Cannot reach Ollama at {self.base_url}. "
+                "Make sure Ollama is running on the same machine as your Mnemo server. "
+                "If using hosted Mnemo, Ollama is not supported — use OpenAI, Claude, or Gemini."
+            )

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
-const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const BACKEND =
+  import.meta.env.VITE_BACKEND_URL || "https://api.adarshraj.in/mnemo";
 
 export function useStream() {
   const [status, setStatus] = useState(null); // current step text

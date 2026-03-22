@@ -99,16 +99,20 @@ export default function Chat() {
   const { data: fetchedMessages, isLoading: msgsLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: () => getMessages(sessionId),
-    enabled: !!sessionId && !stream.streaming,
+    enabled: !!sessionId && !stream.streaming && !stream.status,
   });
 
   useEffect(() => {
-    if (sessionId && fetchedMessages && !stream.streaming) {
-      setMessages(fetchedMessages);
-    } else if (!sessionId) {
+    if (!sessionId) {
       setMessages([]);
+      return;
     }
-  }, [fetchedMessages, sessionId]);
+    // Only update from DB when NOT actively processing
+    // This prevents wiping the optimistic user message mid-stream
+    if (fetchedMessages && !stream.streaming && !stream.status) {
+      setMessages(fetchedMessages);
+    }
+  }, [fetchedMessages, sessionId, stream.streaming, stream.status]);
 
   const { data: sharedKBs = [] } = useQuery({
     queryKey: ["sharedWithMe"],
@@ -157,9 +161,14 @@ export default function Chat() {
       handleSessionUpdate,
     );
 
-    // After stream done — reload messages from DB to get persisted version
-    if (sessionId) {
-      queryClient.invalidateQueries(["messages", sessionId]);
+    // Wait for stream to fully complete before reloading from DB
+    // stream.done is set by useStream when "done" event arrives
+    if (sessionId || stream.sessionId) {
+      const finalSessionId = sessionId || stream.sessionId;
+      setTimeout(() => {
+        queryClient.invalidateQueries(["messages", finalSessionId]);
+        stream.reset();
+      }, 300); // small delay ensures DB write is committed
     }
   }
 
@@ -263,11 +272,6 @@ export default function Chat() {
             {/* Live streaming tokens */}
             {isStreaming && stream.tokens && (
               <StreamingBubble tokens={stream.tokens} />
-            )}
-
-            {/* Completed stream — show final with sources */}
-            {stream.done && stream.tokens && !isStreaming && (
-              <AIBubble message={stream.tokens} sources={stream.sources} />
             )}
 
             {/* Error */}

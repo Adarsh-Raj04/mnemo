@@ -8,7 +8,7 @@ load_dotenv()
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 SENDGRID_FROM = os.getenv("SENDGRID_FROM_EMAIL")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5173")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://api.adarshraj.in/mnemo")
 
 
 def send_email(to_email: str, subject: str, html_content: str) -> bool:

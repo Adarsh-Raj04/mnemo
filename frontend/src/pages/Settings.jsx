@@ -25,16 +25,6 @@ import {
 import StorageBar from "../components/StorageBar";
 import toast from "react-hot-toast";
 
-const MODELS = [
-  "gpt-3.5-turbo",
-  "gpt-4",
-  "gpt-4o",
-  "gpt-4o-mini",
-  "gpt-4.1",
-  "gpt-4.1-mini",
-  "gpt-4.1-nano",
-];
-
 function Section({ title, children }) {
   return (
     <div className="card mb-4">
@@ -135,7 +125,7 @@ function VectorStoreConfig() {
   const [configData, setConfigData] = useState(null);
   const [selected, setSelected] = useState("chroma");
   const [fields, setFields] = useState({});
-  const [testMsg, setTestMsg] = useState({ text: "", ok: true }); // ← fixed
+  const [testMsg, setTestMsg] = useState({ text: "", ok: true });
   const [testLoad, setTestLoad] = useState(false);
   const [saveLoad, setSaveLoad] = useState(false);
   const [showMigrate, setShowMigrate] = useState(false);
@@ -152,9 +142,8 @@ function VectorStoreConfig() {
     const d = await getVectorConfig();
     setConfigData(d);
     setSelected(d.store_type);
-    if (["reading", "migrating", "verifying"].includes(d.migration_status)) {
+    if (["reading", "migrating", "verifying"].includes(d.migration_status))
       startPolling();
-    }
   }
 
   function startPolling() {
@@ -235,7 +224,6 @@ function VectorStoreConfig() {
     failed: "Migration failed. Your original data is safe.",
     none: "",
   };
-
   const migrationStatusColor = {
     reading: "var(--brand)",
     migrating: "var(--brand)",
@@ -255,8 +243,7 @@ function VectorStoreConfig() {
         config: fields,
       });
       setTestMsg({ text: res.message, ok: res.success });
-      if (res.success) toast.success(res.message);
-      else toast.error(res.message);
+      res.success ? toast.success(res.message) : toast.error(res.message);
     } catch (err) {
       const msg = err.response?.data?.detail || "Test failed";
       setTestMsg({ text: msg, ok: false });
@@ -269,11 +256,9 @@ function VectorStoreConfig() {
   async function handleSaveOnly() {
     setSaveLoad(true);
     try {
-      if (selected === "chroma") {
-        await resetVectorStore();
-      } else {
-        await configureVector({ store_type: selected, config: fields });
-      }
+      selected === "chroma"
+        ? await resetVectorStore()
+        : await configureVector({ store_type: selected, config: fields });
       const updated = await getVectorConfig();
       setConfigData(updated);
       setSelected(updated.store_type);
@@ -306,7 +291,6 @@ function VectorStoreConfig() {
 
   return (
     <div>
-      {/* Currently active */}
       <div
         className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg"
         style={{
@@ -330,7 +314,6 @@ function VectorStoreConfig() {
         )}
       </div>
 
-      {/* Migration in progress */}
       {migrating && migStatus && (
         <div
           className="mb-4 p-4 rounded-xl"
@@ -352,7 +335,6 @@ function VectorStoreConfig() {
               {migrationStatusLabel[migStatus.status]}
             </span>
           </div>
-
           {migStatus.total > 0 && (
             <div>
               <div
@@ -383,7 +365,6 @@ function VectorStoreConfig() {
               </div>
             </div>
           )}
-
           {migStatus.status === "done" && (
             <p className="text-xs mt-2" style={{ color: "var(--success)" }}>
               ✅ All {migStatus.total} vectors migrated. Original data kept as
@@ -399,7 +380,6 @@ function VectorStoreConfig() {
         </div>
       )}
 
-      {/* Store selector */}
       <div className="grid grid-cols-2 gap-2 mb-4">
         {STORES.map((s) => (
           <button
@@ -438,7 +418,6 @@ function VectorStoreConfig() {
         ))}
       </div>
 
-      {/* Config fields */}
       {current?.fields.length > 0 && (
         <div
           className="flex flex-col gap-3 mb-4 p-4 rounded-xl"
@@ -466,10 +445,8 @@ function VectorStoreConfig() {
             onClick={handleTest}
             disabled={testLoad}
           >
-            {testLoad && <InlineSpinner size={14} />}
-            🔌 Test Connection
+            {testLoad && <InlineSpinner size={14} />} 🔌 Test Connection
           </button>
-          {/* Inline test result */}
           {testMsg.text && (
             <p
               className="text-xs px-3 py-2 rounded-lg"
@@ -486,7 +463,6 @@ function VectorStoreConfig() {
         </div>
       )}
 
-      {/* Migration choice */}
       {!isSameStore && !migrating && (
         <div
           className="mb-4 p-4 rounded-xl"
@@ -550,7 +526,6 @@ function VectorStoreConfig() {
         </div>
       )}
 
-      {/* Action buttons */}
       {!migrating && (
         <div className="flex gap-2">
           {!isSameStore && showMigrate ? (
@@ -559,8 +534,7 @@ function VectorStoreConfig() {
               onClick={handleMigrate}
               disabled={saveLoad}
             >
-              {saveLoad && <InlineSpinner size={14} />}
-              🔄 Migrate & Switch
+              {saveLoad && <InlineSpinner size={14} />} 🔄 Migrate & Switch
             </button>
           ) : (
             <button
@@ -568,8 +542,7 @@ function VectorStoreConfig() {
               onClick={handleSaveOnly}
               disabled={saveLoad}
             >
-              {saveLoad && <InlineSpinner size={14} />}
-              Save
+              {saveLoad && <InlineSpinner size={14} />} Save
             </button>
           )}
         </div>
@@ -578,7 +551,7 @@ function VectorStoreConfig() {
   );
 }
 
-function AIProviderConfig({ settings, onSave }) {
+function AIProviderConfig({ settings }) {
   const [chatProvider, setChatProvider] = useState(
     settings?.chat_provider || "openai",
   );
@@ -588,6 +561,7 @@ function AIProviderConfig({ settings, onSave }) {
   const [embedProvider, setEmbedProvider] = useState(
     settings?.embed_provider || "openai",
   );
+  const [openaiKey, setOpenaiKey] = useState(""); // ← fixed: was missing
   const [anthropicKey, setAnthropicKey] = useState("");
   const [geminiKey, setGeminiKey] = useState("");
   const [ollamaUrl, setOllamaUrl] = useState(
@@ -647,10 +621,10 @@ function AIProviderConfig({ settings, onSave }) {
         chat_model: chatModel,
         embed_provider: embedProvider,
       };
+      if (openaiKey) payload.openai_api_key = openaiKey;
       if (anthropicKey) payload.anthropic_api_key = anthropicKey;
       if (geminiKey) payload.gemini_api_key = geminiKey;
       if (ollamaUrl) payload.ollama_base_url = ollamaUrl;
-
       await updateSettings(payload);
       toast.success("Provider settings saved!");
     } catch (err) {
@@ -660,146 +634,79 @@ function AIProviderConfig({ settings, onSave }) {
     }
   }
 
+  const sameProvider = chatProvider === embedProvider;
+  const needsOpenAI = chatProvider === "openai" || embedProvider === "openai";
+  const needsClaude = chatProvider === "anthropic";
+  const needsGemini = chatProvider === "gemini" || embedProvider === "gemini";
+  const needsOllama = chatProvider === "ollama" || embedProvider === "ollama";
+
   return (
     <form onSubmit={handleSave}>
       <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-        Configure separate providers for chat generation and document embedding.
-        Embeddings and chat can use different providers.
+        Choose your AI provider for chat and document embedding separately. If
+        you pick the same provider for both, one API key covers everything.
       </p>
 
-      {/* Chat provider */}
-      <div className="mb-4">
-        <label className="label">Chat provider</label>
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          {CHAT_PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setChatProvider(p.id);
-                setChatModel(p.models[0]);
-              }}
-              className="text-left p-3 rounded-xl transition-all"
+      {/* Chat provider selector */}
+      <label className="label">Chat provider</label>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {CHAT_PROVIDERS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => {
+              setChatProvider(p.id);
+              setChatModel(p.models[0]);
+            }}
+            className="text-left p-3 rounded-xl transition-all"
+            style={{
+              border: `2px solid ${chatProvider === p.id ? "var(--brand)" : "var(--border)"}`,
+              background:
+                chatProvider === p.id
+                  ? "var(--brand-light)"
+                  : "var(--bg-secondary)",
+            }}
+          >
+            <p
+              className="text-sm font-medium"
               style={{
-                border: `2px solid ${chatProvider === p.id ? "var(--brand)" : "var(--border)"}`,
-                background:
+                color:
                   chatProvider === p.id
-                    ? "var(--brand-light)"
-                    : "var(--bg-secondary)",
+                    ? "var(--brand)"
+                    : "var(--text-primary)",
               }}
             >
-              <p
-                className="text-sm font-medium"
-                style={{
-                  color:
-                    chatProvider === p.id
-                      ? "var(--brand)"
-                      : "var(--text-primary)",
-                }}
-              >
-                {p.label}
-              </p>
-            </button>
-          ))}
-        </div>
-
-        {/* Model selector for chosen provider */}
-        <label className="label">Model</label>
-        <select
-          className="input"
-          value={chatModel}
-          onChange={(e) => setChatModel(e.target.value)}
-        >
-          {currentChat?.models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+              {p.label}
+            </p>
+          </button>
+        ))}
       </div>
 
-      {/* Provider-specific credentials */}
-      {chatProvider === "anthropic" && (
-        <div
-          className="mb-4 p-4 rounded-xl"
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <label className="label">
-            Anthropic API Key{" "}
-            {settings?.has_anthropic_key && (
-              <span style={{ color: "var(--success)" }}>✅ saved</span>
-            )}
-          </label>
-          <input
-            className="input"
-            type="password"
-            placeholder="sk-ant-..."
-            value={anthropicKey}
-            onChange={(e) => setAnthropicKey(e.target.value)}
-          />
-        </div>
-      )}
-
-      {chatProvider === "gemini" && (
-        <div
-          className="mb-4 p-4 rounded-xl"
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <label className="label">
-            Google AI API Key{" "}
-            {settings?.has_gemini_key && (
-              <span style={{ color: "var(--success)" }}>✅ saved</span>
-            )}
-          </label>
-          <input
-            className="input"
-            type="password"
-            placeholder="AIza..."
-            value={geminiKey}
-            onChange={(e) => setGeminiKey(e.target.value)}
-          />
-        </div>
-      )}
-
-      {chatProvider === "ollama" && (
-        <div
-          className="mb-4 p-4 rounded-xl"
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <label className="label">Ollama base URL</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="http://localhost:11434"
-            value={ollamaUrl}
-            onChange={(e) => setOllamaUrl(e.target.value)}
-          />
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            Make sure Ollama is running locally and the model is pulled.
-          </p>
-        </div>
-      )}
+      {/* Model for chat */}
+      <label className="label">Chat model</label>
+      <select
+        className="input mb-4"
+        value={chatModel}
+        onChange={(e) => setChatModel(e.target.value)}
+      >
+        {currentChat?.models.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
 
       {/* Embedding provider */}
-      <div className="mb-4">
-        <label className="label">Embedding provider</label>
-        <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
-          Used when indexing documents. Changing this requires re-uploading all
-          documents.
-        </p>
+      <label className="label">Embedding provider</label>
+      <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+        Used when indexing documents. Changing this requires re-uploading all
+        documents.
+      </p>
+      <div className="flex flex-col gap-1 mb-4">
         {EMBED_PROVIDERS.map((p) => (
           <label
             key={p.id}
-            className="flex items-center gap-2 text-sm py-2 cursor-pointer"
+            className="flex items-center gap-2 text-sm py-1.5 cursor-pointer"
           >
             <input
               type="radio"
@@ -810,14 +717,217 @@ function AIProviderConfig({ settings, onSave }) {
             <span style={{ color: "var(--text-primary)" }}>{p.label}</span>
           </label>
         ))}
-        {embedProvider !== "openai" && embedProvider !== chatProvider && (
-          <p
-            className="text-xs mt-2 px-3 py-2 rounded-lg"
-            style={{ background: "#faeeda", color: "#633806" }}
-          >
-            ⚠️ Using {embedProvider} for embeddings requires its API key to be
-            saved above.
-          </p>
+      </div>
+
+      {/* Smart credentials — only what's needed */}
+      <div
+        className="p-4 rounded-xl flex flex-col gap-4"
+        style={{
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <p
+          className="text-xs font-medium"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          {sameProvider
+            ? `${CHAT_PROVIDERS.find((p) => p.id === chatProvider)?.label} credentials`
+            : "Credentials needed"}
+        </p>
+
+        {needsOpenAI && (
+          <div>
+            <label className="label">
+              OpenAI API Key
+              {settings?.has_api_key ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--success)" }}
+                >
+                  ✅ saved
+                </span>
+              ) : (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--danger)" }}
+                >
+                  not set
+                </span>
+              )}
+              {!sameProvider &&
+                chatProvider !== "openai" &&
+                embedProvider === "openai" && (
+                  <span
+                    className="ml-2 text-xs"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    (for embeddings)
+                  </span>
+                )}
+              {!sameProvider &&
+                chatProvider === "openai" &&
+                embedProvider !== "openai" && (
+                  <span
+                    className="ml-2 text-xs"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    (for chat)
+                  </span>
+                )}
+              {sameProvider && chatProvider === "openai" && (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (chat + embeddings)
+                </span>
+              )}
+            </label>
+            <input
+              className="input"
+              type="password"
+              placeholder="sk-proj-..."
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value)}
+            />
+          </div>
+        )}
+
+        {needsClaude && (
+          <div>
+            <label className="label">
+              Anthropic API Key
+              {settings?.has_anthropic_key ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--success)" }}
+                >
+                  ✅ saved
+                </span>
+              ) : (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--danger)" }}
+                >
+                  not set
+                </span>
+              )}
+              {!sameProvider && (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (for chat)
+                </span>
+              )}
+            </label>
+            <input
+              className="input"
+              type="password"
+              placeholder="sk-ant-..."
+              value={anthropicKey}
+              onChange={(e) => setAnthropicKey(e.target.value)}
+            />
+          </div>
+        )}
+
+        {needsGemini && (
+          <div>
+            <label className="label">
+              Google AI API Key
+              {settings?.has_gemini_key ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--success)" }}
+                >
+                  ✅ saved
+                </span>
+              ) : (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--danger)" }}
+                >
+                  not set
+                </span>
+              )}
+              {sameProvider && chatProvider === "gemini" ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (chat + embeddings)
+                </span>
+              ) : chatProvider === "gemini" ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (for chat)
+                </span>
+              ) : (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (for embeddings)
+                </span>
+              )}
+            </label>
+            <input
+              className="input"
+              type="password"
+              placeholder="AIza..."
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+            />
+          </div>
+        )}
+
+        {needsOllama && (
+          <div>
+            <label className="label">
+              Ollama base URL
+              {sameProvider && chatProvider === "ollama" ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (chat + embeddings)
+                </span>
+              ) : chatProvider === "ollama" ? (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (for chat)
+                </span>
+              ) : (
+                <span
+                  className="ml-2 text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (for embeddings)
+                </span>
+              )}
+            </label>
+            <input
+              className="input"
+              type="text"
+              placeholder="http://localhost:11434"
+              value={ollamaUrl}
+              onChange={(e) => setOllamaUrl(e.target.value)}
+            />
+            <div
+              className="mt-2 p-3 rounded-lg"
+              style={{ background: "#faeeda" }}
+            >
+              <p className="text-xs" style={{ color: "#854F0B" }}>
+                ⚠️ Self-hosted only — Ollama must run on the same machine as
+                Mnemo.
+              </p>
+            </div>
+          </div>
         )}
       </div>
 
@@ -828,41 +938,28 @@ function AIProviderConfig({ settings, onSave }) {
 
 export default function Settings() {
   const [sessionId, setSessionId] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false); // ← fixed: was missing
+  const [menuOpen, setMenuOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
   });
-
   const updateMutation = useMutation({ mutationFn: updateSettings });
   const clearMutation = useMutation({ mutationFn: clearKnowledgeBase });
   const pwMutation = useMutation({ mutationFn: changePassword });
 
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
   const [chunks, setChunks] = useState({ size: 500, overlap: 50 });
   const [pw, setPw] = useState({ old: "", new: "", confirm: "" });
 
   useEffect(() => {
     if (settings) {
-      setModel(settings.preferred_model || "gpt-3.5-turbo");
       setChunks({
         size: settings.chunk_size || 500,
         overlap: settings.chunk_overlap || 50,
       });
     }
-  }, [settings]); // ← fixed: was useState() instead of useEffect()
-
-  async function save(key, value) {
-    try {
-      await updateMutation.mutateAsync({ [key]: value });
-      toast.success("Saved!");
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed");
-    }
-  }
+  }, [settings]);
 
   if (isLoading)
     return (
@@ -877,13 +974,14 @@ export default function Settings() {
       style={{ background: "var(--bg-primary)" }}
     >
       <ProgressBar />
-      <Navbar onMenuClick={() => setMenuOpen((o) => !o)} /> {/* ← fixed */}
+      <Navbar onMenuClick={() => setMenuOpen((o) => !o)} />
+
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeSessionId={sessionId}
           onSessionSelect={setSessionId}
-          isOpen={menuOpen} // ← fixed
-          onClose={() => setMenuOpen(false)} // ← fixed
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
         />
 
         <main className="flex-1 overflow-y-auto px-8 py-8 max-w-2xl">
@@ -894,64 +992,9 @@ export default function Settings() {
             Settings
           </h1>
 
-          {/* API Key */}
-          <Section title="🔑 OpenAI API Key">
-            <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-              {settings?.has_api_key
-                ? "✅ API key is saved"
-                : "❌ No API key set"}
-            </p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                save("openai_api_key", apiKey);
-              }}
-            >
-              <label className="label">Enter new API key</label>
-              <input
-                className="input"
-                type="password"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
-              <SaveButton loading={updateMutation.isPending} />
-            </form>
-          </Section>
-
-          {/* Model */}
-          <Section title="🤖 AI Model">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                save("preferred_model", model);
-              }}
-            >
-              <label className="label">Choose model</label>
-              <select
-                className="input"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {MODELS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <p
-                className="text-xs mt-1.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                gpt-3.5-turbo is fastest and cheapest. gpt-4o is most capable.
-              </p>
-              <SaveButton loading={updateMutation.isPending} />
-            </form>
-          </Section>
-
-          {/* AI Providers */}
+          {/* AI Providers — handles API keys + model + provider in one place */}
           <Section title="🔌 AI Providers">
-            <AIProviderConfig settings={settings} onSave={save} />
+            <AIProviderConfig settings={settings} />
           </Section>
 
           {/* Chunking */}
