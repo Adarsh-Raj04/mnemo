@@ -11,15 +11,13 @@ from app.routes import (
     connectors,
     prompts,
     storage,
+    api_keys,
+    v1,
 )
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Mnemo API",
-    version="2.0.0",
-    root_path="/mnemo"
-)
+app = FastAPI(title="Mnemo API", version="2.0.0", root_path="/mnemo")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,6 +36,8 @@ app.include_router(vector_store.router)
 app.include_router(connectors.router)
 app.include_router(prompts.router)
 app.include_router(storage.router)
+app.include_router(api_keys.router)
+app.include_router(v1.router)
 
 
 @app.get("/")

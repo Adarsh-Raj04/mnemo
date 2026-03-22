@@ -23,9 +23,12 @@ export default defineConfig([
       },
     },
     rules: {
-      "no-unused-vars": "off", // Completely disable unused vars
-      "react-hooks/rules-of-hooks": "off", // Example: disable a plugin rule
-      "react-refresh/only-export-components": "warn", // Change error to warning
+      "no-unused-vars": "off",
+      camelcase: "off",
+      "id-match": "off",
+      "new-cap": "off",
+      "react-hooks/rules-of-hooks": "off",
+      "react-refresh/only-export-components": "warn",
     },
   },
 ]);

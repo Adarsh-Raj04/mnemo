@@ -240,3 +240,20 @@ class StorageUsage(Base):
     warning_sent = Column(Boolean, default=False)
 
     owner = relationship("User", backref="storage_usage")
+
+
+class UserAPIKey(Base):
+    __tablename__ = "user_api_keys"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    key_hash = Column(String, unique=True, nullable=False, index=True)
+    key_prefix = Column(String, nullable=False)
+    requests_made = Column(Integer, default=0)
+    request_limit = Column(Integer, default=1000)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_active = Column(Boolean, default=True)
+
+    owner = relationship("User", backref="api_keys")

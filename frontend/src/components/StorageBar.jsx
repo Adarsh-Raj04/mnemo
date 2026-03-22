@@ -33,6 +33,7 @@ export default function StorageBar({ compact = false }) {
         ? "#faeeda"
         : "var(--success-light)";
 
+  // ✅ Compact UI
   if (compact) {
     return (
       <div className="flex items-center gap-2">
@@ -55,83 +56,80 @@ export default function StorageBar({ compact = false }) {
     );
   }
 
+  // ✅ Unlimited case
+  if (status === "unlimited") {
+    return (
+      <div
+        className="rounded-xl p-4"
+        style={{
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p
+              className="text-sm font-medium"
+              style={{ color: "var(--text-primary)" }}
+            >
+              Storage Usage
+            </p>
+            <p
+              className="text-xs mt-0.5"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Using {data.store_type} — no storage limit applies
+            </p>
+          </div>
+          <span
+            className="text-xs px-2.5 py-1 rounded-full"
+            style={{
+              background: "var(--success-light)",
+              color: "var(--success)",
+            }}
+          >
+            ∞ Unlimited
+          </span>
+        </div>
+        <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+          {formatBytes(data.original_bytes)} used across {data.doc_count}{" "}
+          documents
+        </p>
+      </div>
+    );
+  }
+
+  // ✅ DEFAULT (missing earlier)
   return (
     <div
       className="rounded-xl p-4"
-      style={{ background: bgColor, border: `1px solid ${color}30` }}
+      style={{
+        background: bgColor,
+        border: "1px solid var(--border)",
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <span
+      <div className="flex items-center justify-between mb-2">
+        <p
           className="text-sm font-medium"
           style={{ color: "var(--text-primary)" }}
         >
           Storage Usage
-        </span>
-        <span className="text-xs font-medium" style={{ color }}>
-          {formatBytes(data.original_bytes)} / 50 MB
+        </p>
+        <span className="text-xs" style={{ color }}>
+          {pct}%
         </span>
       </div>
 
-      {/* Bar */}
-      <div
-        className="h-2 rounded-full overflow-hidden mb-3"
-        style={{ background: "var(--border)" }}
-      >
+      <div className="w-full h-2 rounded-full overflow-hidden bg-[var(--border)]">
         <div
-          className="h-full rounded-full transition-all duration-500"
+          className="h-full transition-all duration-500"
           style={{ width: `${pct}%`, background: color }}
         />
       </div>
 
-      {/* Stats row */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-4">
-          <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Documents
-            </p>
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {data.doc_count}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Sources
-            </p>
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {data.source_count}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Text indexed
-            </p>
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {formatBytes(data.text_bytes)}
-            </p>
-          </div>
-        </div>
-
-        {/* Status badge */}
-        {status !== "ok" && (
-          <span
-            className="text-xs font-medium px-2.5 py-1 rounded-full"
-            style={{ background: color + "20", color }}
-          >
-            {status === "full" ? "⛔ Limit reached" : "⚠️ Approaching limit"}
-          </span>
-        )}
-      </div>
+      <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+        {formatBytes(data.original_bytes)} / 50 MB used
+      </p>
     </div>
   );
 }

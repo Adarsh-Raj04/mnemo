@@ -212,12 +212,16 @@ def sync_connection(
         raise HTTPException(status_code=404, detail="Connection not found")
 
     # Check storage limit
-    orig_bytes, text_bytes = _check_storage(current_user.id, db)
-    if orig_bytes >= STORAGE_LIMIT_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail="Storage limit reached (50MB). Delete some documents before syncing.",
-        )
+    # In the sync_connection endpoint, replace the storage check with:
+    from app.routes.documents import is_using_own_vector_store
+
+    if not is_using_own_vector_store(current_user):
+        orig_bytes, text_bytes = _check_storage(current_user.id, db)
+        if orig_bytes >= STORAGE_LIMIT_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="Storage limit reached (50MB). Connect your own vector store to remove this limit.",
+            )
 
     config = json.loads(decrypt_api_key(conn.config_encrypted))
     source_ids = payload.get("source_ids", [])

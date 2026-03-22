@@ -22,6 +22,18 @@ def get_api_key(user: User) -> str:
     return decrypt_api_key(user.openai_api_key_encrypted)
 
 
+# Add this helper at the top of documents.py
+def is_using_own_vector_store(user) -> bool:
+    """Returns True if user has configured their own vector store."""
+    config_list = getattr(user, "vector_config", None)
+    if not config_list:
+        return False
+    config = config_list[0] if isinstance(config_list, list) else config_list
+    if not config or not config.is_active:
+        return False
+    return config.store_type != "chroma"
+
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -45,6 +57,28 @@ async def upload_document(
         raise HTTPException(
             status_code=400, detail="A document with this name already exists"
         )
+
+    # Only enforce 50MB limit for ChromaDB users
+    if not is_using_own_vector_store(current_user):
+        from app.models import StorageUsage
+
+        usage = (
+            db.query(StorageUsage)
+            .filter(StorageUsage.user_id == current_user.id)
+            .first()
+        )
+
+        current_bytes = usage.original_bytes if usage else 0
+
+        if current_bytes >= 50 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="Storage limit reached (50MB). Delete some documents or connect your own vector store to remove this limit.",
+            )
+
+        if current_bytes >= 40 * 1024 * 1024:
+            # Still allow upload but warn — toast will show on frontend
+            pass  # warning handled by StorageBar component
 
     content = await file.read()
     file_size = len(content)
