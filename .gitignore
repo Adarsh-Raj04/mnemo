@@ -12,6 +12,8 @@ __pycache__/
 .env.local
 .env.*.local
 
+*/.env
+
 # IDE and Editor
 .vscode/
 .idea/
@@ -81,3 +83,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+backend/data
+backend/agent_data
+backend/.env
+frontend/.env
