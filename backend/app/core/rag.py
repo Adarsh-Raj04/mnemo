@@ -2,6 +2,51 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 import uuid
 import os
+from app.core.vector_store.factory import get_vector_store
+from app.core.providers.factory import get_embed_provider
+from app.core.vector_store.chroma import ChromaAdapter
+import re
+
+# Instruction patterns that pollute semantic search
+_INSTRUCTION_PREFIXES = re.compile(
+    r"^(please\s+|can you\s+|could you\s+|i want\s+|i need\s+|"
+    r"tell me\s+|explain\s+|describe\s+|give me\s+|show me\s+|"
+    r"answer (me\s+)?in \d+ words?\s*[-–]?\s*|"
+    r"write\s+(a\s+)?\d+\s+word[s]?\s+(about\s+|on\s+)?|"
+    r"in detail[,\s]+|briefly[,\s]+|summarize[,\s]+)",
+    re.IGNORECASE,
+)
+
+_INSTRUCTION_SUFFIXES = re.compile(
+    r"(\s+in \d+ words?|\s+briefly|\s+in detail|\s+with examples?"
+    r"|\s+step by step|\s+for (a\s+)?(beginner|expert|student)s?)$",
+    re.IGNORECASE,
+)
+
+
+def clean_search_query(question: str) -> str:
+    """
+    Extract the core semantic topic from a user question.
+    Removes instruction words that pollute vector search.
+
+    Examples:
+    "Answer me in 1000 words - what is diabetes" → "what is diabetes"
+    "Please explain photosynthesis in detail"     → "photosynthesis"
+    "Give me a summary of machine learning"       → "machine learning"
+    """
+    q = question.strip()
+
+    # Strip leading instruction phrases
+    q = _INSTRUCTION_PREFIXES.sub("", q).strip()
+
+    # Strip trailing instruction phrases
+    q = _INSTRUCTION_SUFFIXES.sub("", q).strip()
+
+    # Remove leading dash or colon left over after stripping
+    q = re.sub(r"^[-–:,\s]+", "", q).strip()
+
+    # Fall back to original if we stripped too much
+    return q if len(q) >= 3 else question.strip()
 
 
 def load_and_chunk(
@@ -63,9 +108,6 @@ def search_multiple_kbs(
     Search across multiple users' KBs.
     users must be full User objects.
     """
-    from app.core.vector_store.factory import get_vector_store
-    from app.core.providers.factory import get_embed_provider
-    from app.core.vector_store.chroma import ChromaAdapter
 
     all_docs, all_metas = [], []
 

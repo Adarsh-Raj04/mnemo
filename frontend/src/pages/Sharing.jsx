@@ -101,9 +101,9 @@ export default function Sharing() {
                     setForm((p) => ({ ...p, permission: e.target.value }))
                   }
                 >
-                  <option value="viewer">Viewer — can chat</option>
+                  <option value="viewer">Viewer - can chat</option>
                   <option value="contributor">
-                    Contributor — can upload too
+                    Contributor - can upload too
                   </option>
                 </select>
               </div>

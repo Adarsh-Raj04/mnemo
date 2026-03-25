@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import uuid
 from dotenv import load_dotenv
 import os
-
+import logging
 from app.database import get_db
 from app.models import User, VerificationToken, PasswordResetToken
 from app.schemas import SignupRequest, LoginRequest, TokenResponse, UserResponse
@@ -16,6 +16,8 @@ from app.dependencies import get_current_user
 load_dotenv()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
 
@@ -29,7 +31,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     # Add this ↓
     if len(payload.password.encode("utf-8")) > 72:
         raise HTTPException(
-            status_code=400, detail="Password must be 72 characters or fewer"
+            status_code=400, detail="Password must be less than 72 characters"
         )
 
     user = User(
@@ -55,6 +57,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     email_sent = send_verification_email(user.email, token)
 
     if email_sent:
+        logger.info(f"Verification email sent to {user.email}")
         return {
             "message": "Signup successful. Please check your email to verify your account."
         }
@@ -68,7 +71,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
             db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Cleanup error: {e}")
+            logger.error(f"Cleanup error: {e}")
 
         raise HTTPException(
             status_code=500,
@@ -101,12 +104,37 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     db.commit()
 
     return HTMLResponse(
-        """
+        f"""
+    <html>
+    <head>
+        <title>Email Verified</title>
+        <script>
+            let countdown = 5;
+            function updateCountdown() {{
+                const counterEl = document.getElementById("countdown");
+                if (countdown > 0) {{
+                    counterEl.innerText = countdown;
+                    countdown--;
+                }} else {{
+                    window.location.href = "{APP_BASE_URL}";
+                }}
+            }}
+            setInterval(updateCountdown, 1000);
+        </script>
+    </head>
+    <body>
         <div style='font-family:Arial;text-align:center;padding:60px;'>
-            <h2 style='color:#3C3489;'>Email verified successfully!</h2>
-            <p>You can now log in to your Mnemo.</p>
-            <a href='{APP_BASE_URL}' style='color:#534AB7;'>Go to App</a>
+            <h2 style='color:#3C3489;'>Email verified successfully! 🎉</h2>
+            <p>
+                Redirecting to Mnemo in 
+                <span id="countdown" style="font-weight:bold;">5</span> seconds...
+            </p>
+            <p>If not redirected, 
+                <a href="{APP_BASE_URL}" style='color:#534AB7;'>click here</a>
+            </p>
         </div>
+    </body>
+    </html>
     """
     )
 
@@ -135,12 +163,20 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         db.commit()
 
         # Resend email
-        send_verification_email(user.email, token)
+        email_sent = send_verification_email(user.email, token)
 
-        raise HTTPException(
-            status_code=403,
-            detail="Email not verified. We've sent a new verification link to your email.",
-        )
+        if email_sent:
+            logger.info(f"Verification email resent to {user.email}")
+            raise HTTPException(
+                status_code=403,
+                detail="Email not verified. We've sent a new verification link to your email.",
+            )
+        else:
+            logger.error(f"Failed to resend verification email to {user.email}")
+            raise HTTPException(
+                status_code=500,
+                detail="Email not verified and failed to resend verification email. Please try logging in again.",
+            )
 
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer"}

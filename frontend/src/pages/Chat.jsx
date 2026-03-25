@@ -9,7 +9,8 @@ import Navbar from "../components/Navbar";
 import { ProgressBar, InlineSpinner } from "../components/Spinner";
 import { useStream } from "../hooks/useStream";
 
-// Animated status step shown while processing
+const STATUS_MIN_MS = 600; // minimum time each status step is visible
+
 function StatusStep({ message }) {
   return (
     <div className="flex gap-3 mb-4 items-start">
@@ -36,7 +37,6 @@ function StatusStep({ message }) {
   );
 }
 
-// Live streaming bubble — shows tokens as they arrive
 function StreamingBubble({ tokens }) {
   return (
     <div className="flex gap-3 mb-4 items-start">
@@ -49,7 +49,7 @@ function StreamingBubble({ tokens }) {
       </div>
       <div>
         <div
-          className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed"
+          className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed whitespace-pre-wrap"
           style={{
             background: "var(--bg-secondary)",
             border: "1px solid var(--border)",
@@ -57,7 +57,6 @@ function StreamingBubble({ tokens }) {
           }}
         >
           {tokens}
-          {/* Blinking cursor */}
           <span
             className="inline-block w-0.5 h-4 ml-0.5 align-text-bottom animate-pulse"
             style={{ background: "var(--brand)" }}
@@ -72,113 +71,145 @@ export default function Chat() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const [sessionId, setSessionId] = useState(urlSessionId || null);
   const [question, setQuestion] = useState("");
   const [ownerId, setOwnerId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
-  const bottomRef = useRef(null);
+  // Optimistic user message shown while streaming
+  const [pendingUserMsg, setPendingUserMsg] = useState(null);
+  // Lock DB reload until stream is fully done + small buffer
+  const [dbLoadLocked, setDbLoadLocked] = useState(false);
 
+  const bottomRef = useRef(null);
   const stream = useStream();
 
-  // Sync URL param → state
+  // ── URL sync ────────────────────────────────────────────────
   useEffect(() => {
     if (urlSessionId && urlSessionId !== sessionId) {
       setSessionId(urlSessionId);
       setMessages([]);
+      setPendingUserMsg(null);
       stream.reset();
     }
-    if (!urlSessionId) {
+    if (!urlSessionId && sessionId && !stream.streaming && !stream.status) {
       setSessionId(null);
       setMessages([]);
+      setPendingUserMsg(null);
       stream.reset();
     }
   }, [urlSessionId]);
 
-  // Load persisted messages when session changes
-  const { data: fetchedMessages, isLoading: msgsLoading } = useQuery({
+  // ── Load messages from DB ────────────────────────────────────
+  // CRITICAL: disabled while streaming OR locked to prevent mid-stream reload
+  const { data: fetchedMessages } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: () => getMessages(sessionId),
-    enabled: !!sessionId && !stream.streaming && !stream.status,
+    enabled:
+      !!sessionId && !stream.streaming && !stream.status && !dbLoadLocked,
+    staleTime: 0,
   });
 
   useEffect(() => {
+    if (!fetchedMessages) return;
     if (!sessionId) {
       setMessages([]);
       return;
     }
-    // Only update from DB when NOT actively processing
-    // This prevents wiping the optimistic user message mid-stream
-    if (fetchedMessages && !stream.streaming && !stream.status) {
-      setMessages(fetchedMessages);
-    }
-  }, [fetchedMessages, sessionId, stream.streaming, stream.status]);
+    if (stream.streaming || stream.status || dbLoadLocked) return;
 
+    // DB has loaded — now safe to show DB messages and clear stream state
+    setMessages(fetchedMessages);
+    setPendingUserMsg(null);
+    stream.clearAfterLoad(); // ← clears tokens/sources AFTER DB data is ready
+  }, [fetchedMessages, sessionId]);
+
+  // ── Shared KBs ───────────────────────────────────────────────
   const { data: sharedKBs = [] } = useQuery({
     queryKey: ["sharedWithMe"],
     queryFn: getSharedWithMe,
   });
 
-  // Auto-scroll
+  // ── Auto-scroll ──────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, stream.tokens, stream.status]);
+  }, [messages, stream.tokens, stream.status, pendingUserMsg]);
 
-  function handleSessionSelect(id) {
-    setSessionId(id);
-    setMessages([]);
-    setQuestion("");
-    stream.reset();
-    navigate(id ? `/chat/${id}` : "/chat", { replace: true });
-  }
-
-  // Called from useStream when session_id or title comes back
+  // ── Session callbacks from stream ────────────────────────────
   const handleSessionUpdate = useCallback(
-    (newSessionId, newTitle) => {
-      if (newSessionId && newSessionId !== sessionId) {
+    (newSessionId, newTitle, eventType) => {
+      if (
+        eventType === "session" &&
+        newSessionId &&
+        newSessionId !== sessionId
+      ) {
+        // New session created — update URL and state but DON'T trigger DB reload yet
         setSessionId(newSessionId);
+        setDbLoadLocked(true); // ← lock DB reload until streaming done
         navigate(`/chat/${newSessionId}`, { replace: true });
+        queryClient.invalidateQueries(["sessions"]); // refresh sidebar
       }
-      // Refresh session list in sidebar
-      queryClient.invalidateQueries(["sessions"]);
+
+      if (eventType === "done") {
+        // Streaming finished — unlock DB reload after small buffer
+        setTimeout(() => {
+          setDbLoadLocked(false);
+          queryClient.invalidateQueries([
+            "messages",
+            newSessionId || sessionId,
+          ]);
+          queryClient.invalidateQueries(["sessions"]);
+        }, 400); // 400ms ensures DB write is committed before we fetch
+      }
     },
     [sessionId, navigate, queryClient],
   );
 
+  // ── Send message ─────────────────────────────────────────────
   async function handleSend(e) {
     e.preventDefault();
-    if (!question.trim() || stream.streaming) return;
+    if (!question.trim() || stream.streaming || stream.status) return;
 
     const userMsg = question.trim();
     setQuestion("");
-    stream.reset();
 
-    // Optimistically add user message
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    // Show user message optimistically — stays visible entire time
+    setPendingUserMsg(userMsg);
+    setDbLoadLocked(true);
 
     await stream.ask(
       { session_id: sessionId, question: userMsg, owner_id: ownerId },
       handleSessionUpdate,
     );
-
-    // Wait for stream to fully complete before reloading from DB
-    // stream.done is set by useStream when "done" event arrives
-    if (sessionId || stream.sessionId) {
-      const finalSessionId = sessionId || stream.sessionId;
-      setTimeout(() => {
-        queryClient.invalidateQueries(["messages", finalSessionId]);
-        stream.reset();
-      }, 300); // small delay ensures DB write is committed
-    }
   }
+
+  // ── Session select (from sidebar) ────────────────────────────
+  function handleSessionSelect(id) {
+    stream.reset();
+    setPendingUserMsg(null);
+    setDbLoadLocked(false);
+    setSessionId(id);
+    setMessages([]);
+    setQuestion("");
+    navigate(id ? `/chat/${id}` : "/chat", { replace: true });
+  }
+
+  const isProcessing = !!stream.status;
+  const isStreaming = stream.streaming;
+
+  // What to show in the AI area:
+  // - status step while processing
+  // - streaming bubble while tokens arriving
+  // - nothing once done (DB messages take over seamlessly)
+  const showStatus = isProcessing && !isStreaming;
+  const showStreaming = isStreaming && !!stream.tokens;
+  const showDoneBubble = stream.done && !!stream.tokens && !isStreaming;
 
   const kbOptions = [
     { label: "My Knowledge Base", value: null },
     ...sharedKBs.map((s) => ({ label: s.owner_email, value: s.owner_id })),
   ];
-
-  const isProcessing = !!stream.status; // status steps showing
-  const isStreaming = stream.streaming; // tokens arriving
 
   return (
     <div
@@ -197,7 +228,6 @@ export default function Chat() {
         />
 
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Shared KB selector */}
           {sharedKBs.length > 0 && (
             <div
               className="px-6 py-2 flex items-center gap-2"
@@ -225,13 +255,12 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {/* Empty state */}
             {!sessionId &&
               messages.length === 0 &&
-              !isProcessing &&
-              !isStreaming && (
+              !pendingUserMsg &&
+              !isProcessing && (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                   <div className="text-5xl">💬</div>
                   <h2
@@ -250,14 +279,7 @@ export default function Chat() {
                 </div>
               )}
 
-            {/* Loading persisted messages */}
-            {msgsLoading && !isStreaming && (
-              <div className="flex justify-center py-8">
-                <InlineSpinner size={24} />
-              </div>
-            )}
-
-            {/* Persisted messages */}
+            {/* DB messages */}
             {messages.map((msg, i) =>
               msg.role === "user" ? (
                 <UserBubble key={i} message={msg.content} />
@@ -266,12 +288,18 @@ export default function Chat() {
               ),
             )}
 
-            {/* Live status steps */}
-            {isProcessing && <StatusStep message={stream.status} />}
+            {/* Optimistic user message — shown immediately on send */}
+            {pendingUserMsg && <UserBubble message={pendingUserMsg} />}
 
-            {/* Live streaming tokens */}
-            {isStreaming && stream.tokens && (
-              <StreamingBubble tokens={stream.tokens} />
+            {/* Status steps */}
+            {showStatus && <StatusStep message={stream.status} />}
+
+            {/* Live streaming */}
+            {showStreaming && <StreamingBubble tokens={stream.tokens} />}
+
+            {/* Done but DB not loaded yet — keep showing tokens to avoid blank */}
+            {showDoneBubble && (
+              <AIBubble message={stream.tokens} sources={stream.sources} />
             )}
 
             {/* Error */}

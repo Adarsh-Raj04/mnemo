@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -117,6 +118,7 @@ def stream_chat(
 
         # ── Step 2: Ranking ──────────────────────────────────────
         yield sse_event({"type": "status", "message": "📊 Ranking relevant chunks..."})
+        time.sleep(0.5)
 
         if not chunks:
             yield sse_event(
