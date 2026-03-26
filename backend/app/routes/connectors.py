@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-
+import os
 from app.database import get_db
 from app.models import User, DataSourceConnection
 from app.dependencies import get_verified_user
@@ -328,29 +328,23 @@ def delete_connection(
 # Google Drive OAuth routes
 @router.get("/gdrive/auth")
 def gdrive_auth(current_user: User = Depends(get_verified_user)):
-    url = get_gdrive_auth_url()
-    return {"auth_url": url}
+    url, state = get_gdrive_auth_url()  # ✅ unpack both values
+    return {"auth_url": url, "state": state}
 
 
 @router.get("/gdrive/callback")
 def gdrive_callback(code: str, state: str = None, db: Session = Depends(get_db)):
-    """
-    Google redirects here after OAuth consent.
-    Store tokens temporarily — frontend polls to pick them up.
-    """
     try:
-        tokens = exchange_code_for_tokens(code)
-        # Store in a temp cache (in production use Redis)
-        # For now return tokens as query params back to frontend
+        tokens = exchange_code_for_tokens(code, state)  # ✅ pass state through
         frontend_url = (
-            f"{__import__('os').getenv('APP_BASE_URL', 'http://localhost:5173')}"
+            f"{os.getenv('APP_BASE_URL', 'http://localhost:5173')}"
             f"/connectors?gdrive_token={tokens['access_token']}"
             f"&gdrive_refresh={tokens.get('refresh_token', '')}"
         )
         return RedirectResponse(url=frontend_url)
     except Exception as e:
         return RedirectResponse(
-            url=f"{__import__('os').getenv('APP_BASE_URL')}/connectors?gdrive_error={str(e)}"
+            url=f"{os.getenv('APP_BASE_URL')}/connectors?gdrive_error={str(e)}"
         )
 
 
