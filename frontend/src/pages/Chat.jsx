@@ -127,10 +127,9 @@ export default function Chat() {
     }
     if (stream.streaming || stream.status || dbLoadLocked) return;
 
-    // DB has loaded — now safe to show DB messages and clear stream state
     setMessages(fetchedMessages);
-    setPendingUserMsg(null);
-    stream.clearAfterLoad(); // ← clears tokens/sources AFTER DB data is ready
+    setPendingUserMsg(null); // ✅ Only clear AFTER DB messages are ready
+    stream.clearAfterLoad();
   }, [fetchedMessages, sessionId]);
 
   // ── Shared KBs ───────────────────────────────────────────────
@@ -152,26 +151,33 @@ export default function Chat() {
         newSessionId &&
         newSessionId !== sessionId
       ) {
-        // New session created — update URL and state but DON'T trigger DB reload yet
         setSessionId(newSessionId);
-        setDbLoadLocked(true); // ← lock DB reload until streaming done
+        setDbLoadLocked(true);
         navigate(`/chat/${newSessionId}`, { replace: true });
-        queryClient.invalidateQueries(["sessions"]); // refresh sidebar
+        queryClient.invalidateQueries(["sessions"]);
       }
 
       if (eventType === "done") {
-        setTimeout(() => {
-          setDbLoadLocked(false);
-          setPendingUserMsg(null); // ← add this line
-          queryClient.invalidateQueries([
-            "messages",
-            newSessionId || sessionId,
+        // ✅ Inject assistant message but KEEP pendingUserMsg alive
+        if (stream.tokens) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: stream.tokens,
+              sources: stream.sources ?? [],
+            },
           ]);
-          queryClient.invalidateQueries(["sessions"]);
-        }, 400);
+        }
+        // ❌ Remove this — don't clear pendingUserMsg here
+        // setPendingUserMsg(null);
+
+        setDbLoadLocked(false);
+        queryClient.invalidateQueries(["messages", newSessionId || sessionId]);
+        queryClient.invalidateQueries(["sessions"]);
       }
     },
-    [sessionId, navigate, queryClient],
+    [sessionId, navigate, queryClient, stream.tokens, stream.sources],
   );
 
   // ── Send message ─────────────────────────────────────────────
