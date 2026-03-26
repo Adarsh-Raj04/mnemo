@@ -111,6 +111,14 @@ export default function Chat() {
     staleTime: 0,
   });
 
+  // ── Unlock on error ──────────────────────────────────────────
+  useEffect(() => {
+    if (stream.error) {
+      setDbLoadLocked(false);
+      setPendingUserMsg(null);
+    }
+  }, [stream.error]);
+
   useEffect(() => {
     if (!fetchedMessages) return;
     if (!sessionId) {
@@ -152,15 +160,15 @@ export default function Chat() {
       }
 
       if (eventType === "done") {
-        // Streaming finished — unlock DB reload after small buffer
         setTimeout(() => {
           setDbLoadLocked(false);
+          setPendingUserMsg(null); // ← add this line
           queryClient.invalidateQueries([
             "messages",
             newSessionId || sessionId,
           ]);
           queryClient.invalidateQueries(["sessions"]);
-        }, 400); // 400ms ensures DB write is committed before we fetch
+        }, 400);
       }
     },
     [sessionId, navigate, queryClient],
@@ -173,15 +181,19 @@ export default function Chat() {
 
     const userMsg = question.trim();
     setQuestion("");
-
-    // Show user message optimistically — stays visible entire time
     setPendingUserMsg(userMsg);
     setDbLoadLocked(true);
 
-    await stream.ask(
-      { session_id: sessionId, question: userMsg, owner_id: ownerId },
-      handleSessionUpdate,
-    );
+    try {
+      await stream.ask(
+        { session_id: sessionId, question: userMsg, owner_id: ownerId },
+        handleSessionUpdate,
+      );
+    } catch {
+      // stream.ask threw synchronously — unlock so UI doesn't freeze
+      setDbLoadLocked(false);
+      setPendingUserMsg(null);
+    }
   }
 
   // ── Session select (from sidebar) ────────────────────────────

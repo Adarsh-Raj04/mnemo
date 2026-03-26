@@ -15,7 +15,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 
 export default function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
 
   if (loading)
     return (
@@ -49,7 +49,10 @@ export default function App() {
         }}
       />
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route
+          path="/"
+          element={user ? <Navigate to="/chat" replace /> : <Landing />}
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
