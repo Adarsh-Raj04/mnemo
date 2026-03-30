@@ -109,6 +109,11 @@ def stream_chat(
         try:
             search_users = get_search_users(current_user, payload.owner_id, db)
             chunks, metadatas = search_multiple_kbs(payload.question, search_users)
+            print("Chunks found:", len(chunks))
+            print("Metadatas found:", len(metadatas))
+
+            print("Sample metadata:", metadatas[0] if metadatas else "No metadata")
+            print("Sample chunk:", chunks[0] if chunks else "No chunks")
         except HTTPException as e:
             yield sse_event({"type": "error", "message": e.detail})
             return
@@ -121,10 +126,22 @@ def stream_chat(
         time.sleep(0.5)
 
         if not chunks:
-            yield sse_event(
-                {"type": "status", "message": "⚠️ No relevant content found"}
+            # ✅ Check if user has any documents at all vs just no relevant results
+            from app.models import Document
+
+            print("Checking for documents for user:", current_user.id)
+
+            has_docs = (
+                db.query(Document).filter(Document.user_id == current_user.id).first()
             )
-            no_answer = "I couldn't find relevant content in your documents."
+
+            no_answer = (
+                "You haven't uploaded any documents yet. Please upload a document first to start chatting."
+                if not has_docs
+                else "I couldn't find anything relevant to your question in your documents. Try rephrasing or upload more related content."
+            )
+
+            yield sse_event({"type": "status", "message": "⚠️ No documents found"})
             yield sse_event({"type": "token", "content": no_answer})
             yield sse_event({"type": "sources", "content": []})
             yield sse_event(

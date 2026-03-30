@@ -26,7 +26,9 @@ export default function Sidebar({
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["sessions"],
     queryFn: listSessions,
-    refetchInterval: 10000,
+    staleTime: 30_000, // ✅ don't refetch for 30s
+    refetchOnWindowFocus: false, // ✅ stop refetching on tab focus
+    refetchInterval: false,
   });
 
   const deleteMutation = useMutation({

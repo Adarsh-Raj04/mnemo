@@ -98,17 +98,22 @@ def search_chunks(query: str, user, n_results: int = 5):
     embed_provider = get_embed_provider(user)
     store = get_vector_store(user)
     query_embedding = embed_provider.embed_query(query)
-    return store.search(user.id, query_embedding, n_results)
+    docs, metas = store.search(user.id, query_embedding, n_results)
+
+    # ✅ Filter out any None values that crash str joins downstream
+    docs = [d for d in (docs or []) if d is not None]
+    metas = [m for m in (metas or []) if m is not None]
+
+    # ✅ Raise a clean sentinel error if no documents found
+    if not docs:
+        raise ValueError("NO_DOCUMENTS")
+
+    return docs, metas
 
 
 def search_multiple_kbs(
     query: str, users: list, api_key: str = None, n_results: int = 5
 ):
-    """
-    Search across multiple users' KBs.
-    users must be full User objects.
-    """
-
     all_docs, all_metas = [], []
 
     for user in users:
@@ -129,12 +134,23 @@ def search_multiple_kbs(
                 user_id = user.id
                 query_embedding = embed_provider.embed_query(query)
 
-            docs, metas = store.search(user_id, query_embedding, n_results)
-            all_docs.extend(docs)
-            all_metas.extend(metas)
+            # ✅ Wrap store.search separately so collection-not-found
+            # errors don't propagate — just treat as empty result
+            try:
+                result = store.search(user_id, query_embedding, n_results)
+                if result and result != (None, None):
+                    docs, metas = result
+                    docs = [d for d in (docs or []) if d is not None]
+                    metas = [m for m in (metas or []) if m is not None]
+                    all_docs.extend(docs)
+                    all_metas.extend(metas)
+            except Exception as search_err:
+                # Collection doesn't exist yet = no documents, not a crash
+                print(f"Store search returned empty for user {user_id}: {search_err}")
+
         except Exception as e:
             uid = user if isinstance(user, str) else getattr(user, "id", "?")
-            print(f"Search failed for user {uid}: {e}")
+            print(f"Embed/setup failed for user {uid}: {e}")
             continue
 
     return all_docs[:n_results], all_metas[:n_results]
