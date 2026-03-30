@@ -7,12 +7,17 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     Enum,
+    MetaData,
 )
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship, backref, declarative_base
 from sqlalchemy.sql import func
 from app.database import Base
 import uuid
 import enum
+
+
+metadata = MetaData(schema="mnemo")
+Base = declarative_base(metadata=metadata)
 
 
 def gen_uuid():
